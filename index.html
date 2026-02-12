@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon SQL Client</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-slate-900 to-slate-800 min-h-screen">
+    <div class="container mx-auto p-8">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-2xl p-6 mb-6">
+            <div class="flex items-center gap-3">
+                <svg class="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                </svg>
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">Neon SQL Client</h1>
+                    <p class="text-sm text-gray-600">Ejecuta queries en tiempo real</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connection Form -->
+        <div id="connectionForm" class="bg-white rounded-lg shadow-2xl p-6 mb-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Conectar a Neon PostgreSQL</h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Neon Connection String
+                    </label>
+                    <input 
+                        type="password" 
+                        id="connectionString"
+                        placeholder="postgresql://user:pass@ep-xxx.region.aws.neon.tech/dbname"
+                        class="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    />
+                </div>
+
+                <button 
+                    onclick="connect()"
+                    class="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 px-4 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg"
+                >
+                    Conectar a Neon
+                </button>
+
+                <div id="connectionStatus" class="hidden"></div>
+            </div>
+        </div>
+
+        <!-- SQL Editor (hidden initially) -->
+        <div id="sqlEditor" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Editor -->
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-lg shadow-2xl p-6">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4">SQL Editor</h2>
+                        
+                        <textarea 
+                            id="queryInput"
+                            placeholder="Escribe tu SQL query aquí...
+
+Ejemplo:
+SELECT * FROM information_schema.tables 
+WHERE table_schema = 'public';"
+                            class="w-full h-64 p-4 border-2 border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none mb-4"
+                        ></textarea>
+
+                        <button 
+                            onclick="executeQuery()"
+                            class="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 px-4 rounded-lg font-bold hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg"
+                        >
+                            ▶ Ejecutar Query
+                        </button>
+
+                        <div id="executionTime" class="text-xs text-gray-500 mt-2 hidden"></div>
+                    </div>
+
+                    <!-- Results -->
+                    <div id="results" class="mt-6"></div>
+                </div>
+
+                <!-- Templates -->
+                <div class="bg-white rounded-lg shadow-2xl p-6">
+                    <h3 class="font-bold text-gray-800 mb-4">📝 Queries Comunes</h3>
+                    <div class="space-y-2">
+                        <button onclick="setQuery('SELECT version();')" class="w-full text-left p-3 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors text-sm">
+                            <p class="font-semibold text-gray-800">Ver versión</p>
+                        </button>
+                        <button onclick="setQuery(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';`)" class="w-full text-left p-3 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors text-sm">
+                            <p class="font-semibold text-gray-800">Ver tablas</p>
+                        </button>
+                        <button onclick="setQuery(`CREATE TABLE clientes (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100),
+    email VARCHAR(150),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`)" class="w-full text-left p-3 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors text-sm">
+                            <p class="font-semibold text-gray-800">Crear tabla ejemplo</p>
+                        </button>
+                        <button onclick="setQuery(`INSERT INTO clientes (nombre, email) VALUES ('Juan Pérez', 'juan@email.com');`)" class="w-full text-left p-3 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors text-sm">
+                            <p class="font-semibold text-gray-800">INSERT ejemplo</p>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let connected = false;
+
+        async function connect() {
+            const connectionString = document.getElementById('connectionString').value;
+            const statusDiv = document.getElementById('connectionStatus');
+            
+            if (!connectionString) {
+                showStatus('Por favor ingresa el connection string', 'error');
+                return;
+            }
+
+            statusDiv.innerHTML = '<p class="text-blue-600">Conectando...</p>';
+            statusDiv.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ connectionString })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    connected = true;
+                    document.getElementById('connectionForm').classList.add('hidden');
+                    document.getElementById('sqlEditor').classList.remove('hidden');
+                    showStatus('✅ Conectado exitosamente!', 'success');
+                } else {
+                    showStatus('❌ Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showStatus('❌ Error al conectar: ' + error.message, 'error');
+            }
+        }
+
+        async function executeQuery() {
+            const query = document.getElementById('queryInput').value;
+            const resultsDiv = document.getElementById('results');
+            const timeDiv = document.getElementById('executionTime');
+
+            if (!query.trim()) {
+                alert('Por favor escribe un query');
+                return;
+            }
+
+            resultsDiv.innerHTML = '<div class="bg-white rounded-lg shadow-lg p-6"><p class="text-blue-600">Ejecutando...</p></div>';
+            
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+
+                const data = await response.json();
+                const endTime = Date.now();
+                
+                timeDiv.textContent = `⚡ Tiempo: ${endTime - startTime}ms`;
+                timeDiv.classList.remove('hidden');
+
+                if (data.success) {
+                    displayResults(data.data);
+                } else {
+                    displayError(data.error);
+                }
+            } catch (error) {
+                displayError(error.message);
+            }
+        }
+
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (data.rows && data.rows.length > 0) {
+                let html = `
+                    <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                        <div class="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-3">
+                            <span class="font-bold">✅ Resultados (${data.rowCount} filas)</span>
+                        </div>
+                        <div class="p-4 overflow-x-auto">
+                            <table class="w-full text-sm border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-100">
+                `;
+                
+                data.fields.forEach(field => {
+                    html += `<th class="p-3 text-left border border-gray-300 font-bold">${field.name}</th>`;
+                });
+                
+                html += `</tr></thead><tbody>`;
+                
+                data.rows.forEach(row => {
+                    html += '<tr class="hover:bg-blue-50">';
+                    data.fields.forEach(field => {
+                        const value = row[field.name];
+                        html += `<td class="p-3 border border-gray-300">${value === null ? '<span class="text-gray-400 italic">NULL</span>' : value}</td>`;
+                    });
+                    html += '</tr>';
+                });
+                
+                html += `</tbody></table></div></div>`;
+                resultsDiv.innerHTML = html;
+            } else {
+                resultsDiv.innerHTML = `
+                    <div class="bg-white rounded-lg shadow-lg p-6">
+                        <p class="text-green-700">✅ Query ejecutado exitosamente. ${data.command} completado.</p>
+                        <p class="text-sm text-gray-600 mt-2">${data.rowCount || 0} fila(s) afectada(s)</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayError(error) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                        <p class="font-semibold text-red-800">❌ Error</p>
+                        <p class="text-red-700 text-sm mt-1 font-mono">${error}</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('connectionStatus');
+            const bgColor = type === 'success' ? 'bg-green-50 border-green-500 text-green-800' : 'bg-red-50 border-red-500 text-red-800';
+            statusDiv.innerHTML = `<div class="${bgColor} border-l-4 p-4 rounded">${message}</div>`;
+            statusDiv.classList.remove('hidden');
+        }
+
+        function setQuery(query) {
+            document.getElementById('queryInput').value = query;
+        }
+    </script>
+</body>
+</html>
