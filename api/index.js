@@ -93,24 +93,3 @@ app.post('/api/query', async (req, res) => {
 });
 
 module.exports = app;
-```
-
-### 3.4 Guardar (Commit)
-- Baja hasta el fondo
-- Click en **"Commit changes"** (botón verde)
-- En el popup, click en **"Commit changes"** otra vez
-
-✅ **¡Listo!** Vuelves al repo y ahora deberías ver:
-- Una **carpeta** llamada `api`
-- Dentro: `index.js`
-
----
-
-## ⚙️ PASO 4: Crear vercel.json
-
-### 4.1 Add file
-- Click en **"Add file"** → **"Create new file"**
-
-### 4.2 Nombre
-```
-vercel.json
