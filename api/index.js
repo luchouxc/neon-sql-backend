@@ -4,6 +4,7 @@ const cors = require('cors');
 
 const app = express();
 
+// CORS abierto para permitir conexiones
 app.use(cors({
   origin: '*',
   credentials: false
@@ -13,6 +14,7 @@ app.use(express.json());
 
 let pool = null;
 
+// Endpoint de prueba
 app.get('/api', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -21,6 +23,7 @@ app.get('/api', (req, res) => {
   });
 });
 
+// Conectar a PostgreSQL
 app.post('/api/connect', async (req, res) => {
   try {
     const { connectionString } = req.body;
@@ -54,6 +57,7 @@ app.post('/api/connect', async (req, res) => {
   }
 });
 
+// Ejecutar query
 app.post('/api/query', async (req, res) => {
   try {
     const { query } = req.body;
