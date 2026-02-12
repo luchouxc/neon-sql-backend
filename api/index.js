@@ -5,8 +5,8 @@ const cors = require('cors');
 const app = express();
 
 app.use(cors({
-  origin: ['https://claude.ai', 'http://localhost:3000'],
-  credentials: true
+  origin: '*',
+  credentials: false
 }));
 
 app.use(express.json());
