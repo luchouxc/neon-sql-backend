@@ -12,24 +12,3 @@
     "cors": "^2.8.5"
   }
 }
-```
-
-#### 2.4 Guardar
-- Baja hasta el fondo
-- Click en **"Commit changes"** (botón verde)
-- En el popup, click en **"Commit changes"** otra vez
-
-✅ **Listo!** Vuelves a la página principal del repo.
-
----
-
-### **PASO 3: Crear api/index.js (2 minutos)**
-
-#### 3.1 Crear archivo
-- Click en **"Add file"**
-- Click en **"Create new file"**
-
-#### 3.2 Nombre MUY IMPORTANTE
-En "Name your file...", escribe EXACTAMENTE:
-```
-api/index.js
