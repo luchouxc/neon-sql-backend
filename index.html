@@ -4,7 +4,180 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Neon SQL Client</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        let savedConnectionString = '';
+
+        // Cargar connection string del localStorage al cargar la página
+        window.addEventListener('DOMContentLoaded', () => {
+            const saved = localStorage.getItem('neonConnectionString');
+            if (saved) {
+                document.getElementById('connectionString').value = saved;
+                savedConnectionString = saved;
+            }
+        });
+
+        async function connect() {
+            const connectionString = document.getElementById('connectionString').value;
+            const statusDiv = document.getElementById('connectionStatus');
+            
+            if (!connectionString) {
+                showStatus('Por favor ingresa el connection string', 'error');
+                return;
+            }
+
+            statusDiv.innerHTML = '<p class="text-blue-600">Conectando...</p>';
+            statusDiv.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ connectionString })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    savedConnectionString = connectionString;
+                    
+                    // Guardar en localStorage
+                    localStorage.setItem('neonConnectionString', connectionString);
+                    
+                    document.getElementById('connectionForm').classList.add('hidden');
+                    document.getElementById('sqlEditor').classList.remove('hidden');
+                    showStatus('✅ Conectado exitosamente!', 'success');
+                } else {
+                    showStatus('❌ Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showStatus('❌ Error al conectar: ' + error.message, 'error');
+            }
+        }
+
+        async function executeQuery() {
+            const query = document.getElementById('queryInput').value;
+            const resultsDiv = document.getElementById('results');
+            const timeDiv = document.getElementById('executionTime');
+
+            if (!query.trim()) {
+                alert('Por favor escribe un query');
+                return;
+            }
+
+            // Verificar que tengamos connection string
+            if (!savedConnectionString) {
+                const saved = localStorage.getItem('neonConnectionString');
+                if (saved) {
+                    savedConnectionString = saved;
+                } else {
+                    displayError('No hay conexión guardada. Por favor reconecta.');
+                    return;
+                }
+            }
+
+            resultsDiv.innerHTML = '<div class="bg-white rounded-lg shadow-lg p-6"><p class="text-blue-600">Ejecutando...</p></div>';
+            
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        query: query,
+                        connectionString: savedConnectionString
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const endTime = Date.now();
+                
+                timeDiv.textContent = `⚡ Tiempo: ${endTime - startTime}ms`;
+                timeDiv.classList.remove('hidden');
+
+                if (data.success) {
+                    displayResults(data.data);
+                } else {
+                    displayError(data.error);
+                }
+            } catch (error) {
+                displayError('Error de red: ' + error.message);
+            }
+        }
+
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (data.rows && data.rows.length > 0) {
+                let html = `
+                    <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                        <div class="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-3">
+                            <span class="font-bold">✅ Resultados (${data.rowCount} filas)</span>
+                        </div>
+                        <div class="p-4 overflow-x-auto max-h-96">
+                            <table class="w-full text-sm border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-100">
+                `;
+                
+                data.fields.forEach(field => {
+                    html += `<th class="p-3 text-left border border-gray-300 font-bold">${field.name}</th>`;
+                });
+                
+                html += `</tr></thead><tbody>`;
+                
+                data.rows.forEach((row, idx) => {
+                    html += '<tr class="hover:bg-blue-50">';
+                    data.fields.forEach(field => {
+                        const value = row[field.name];
+                        const displayValue = value === null ? '<span class="text-gray-400 italic">NULL</span>' : 
+                                           typeof value === 'object' ? JSON.stringify(value) : 
+                                           String(value);
+                        html += `<td class="p-3 border border-gray-300">${displayValue}</td>`;
+                    });
+                    html += '</tr>';
+                });
+                
+                html += `</tbody></table></div></div>`;
+                resultsDiv.innerHTML = html;
+            } else {
+                resultsDiv.innerHTML = `
+                    <div class="bg-white rounded-lg shadow-lg p-6">
+                        <p class="text-green-700 font-bold">✅ Query ejecutado exitosamente</p>
+                        <p class="text-gray-700 mt-2">Comando: ${data.command || 'Completado'}</p>
+                        <p class="text-sm text-gray-600 mt-1">${data.rowCount || 0} fila(s) afectada(s)</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayError(error) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                        <p class="font-semibold text-red-800">❌ Error</p>
+                        <p class="text-red-700 text-sm mt-2 font-mono whitespace-pre-wrap">${error}</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('connectionStatus');
+            const bgColor = type === 'success' ? 'bg-green-50 border-green-500 text-green-800' : 'bg-red-50 border-red-500 text-red-800';
+            statusDiv.innerHTML = `<div class="${bgColor} border-l-4 p-4 rounded">${message}</div>`;
+            statusDiv.classList.remove('hidden');
+        }
+
+        function setQuery(query) {
+            document.getElementById('queryInput').value = query;
+        }
+    </script>
 </head>
 <body class="bg-gradient-to-br from-slate-900 to-slate-800 min-h-screen">
     <div class="container mx-auto p-8">
