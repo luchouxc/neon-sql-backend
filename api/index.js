@@ -4,7 +4,6 @@ const cors = require('cors');
 
 const app = express();
 
-// CORS abierto para permitir conexiones
 app.use(cors({
   origin: '*',
   credentials: false
@@ -12,7 +11,34 @@ app.use(cors({
 
 app.use(express.json());
 
+// Pool global persistente
 let pool = null;
+let lastConnectionString = null;
+
+// Función para obtener o crear pool
+function getPool(connectionString) {
+  // Si ya existe un pool con el mismo connection string, reutilizarlo
+  if (pool && lastConnectionString === connectionString) {
+    return pool;
+  }
+  
+  // Si hay un pool viejo, cerrarlo
+  if (pool) {
+    pool.end();
+  }
+  
+  // Crear nuevo pool
+  pool = new Pool({
+    connectionString: connectionString,
+    ssl: { rejectUnauthorized: false },
+    max: 10, // máximo de conexiones
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  });
+  
+  lastConnectionString = connectionString;
+  return pool;
+}
 
 // Endpoint de prueba
 app.get('/api', (req, res) => {
@@ -35,18 +61,18 @@ app.post('/api/connect', async (req, res) => {
       });
     }
 
-    pool = new Pool({
-      connectionString: connectionString,
-      ssl: { rejectUnauthorized: false }
-    });
+    // Obtener o crear pool
+    const currentPool = getPool(connectionString);
 
-    const client = await pool.connect();
+    // Probar conexión
+    const client = await currentPool.connect();
     await client.query('SELECT NOW()');
     client.release();
 
     res.json({ 
       success: true, 
-      message: 'Conectado a PostgreSQL' 
+      message: 'Conectado a PostgreSQL',
+      connectionString: connectionString // Devolver para guardar en frontend
     });
   } catch (error) {
     console.error('Error:', error);
@@ -60,7 +86,7 @@ app.post('/api/connect', async (req, res) => {
 // Ejecutar query
 app.post('/api/query', async (req, res) => {
   try {
-    const { query } = req.body;
+    const { query, connectionString } = req.body;
     
     if (!query) {
       return res.status(400).json({ 
@@ -69,14 +95,21 @@ app.post('/api/query', async (req, res) => {
       });
     }
 
-    if (!pool) {
+    // Si viene connectionString, reconectar automáticamente
+    let currentPool = pool;
+    if (connectionString) {
+      currentPool = getPool(connectionString);
+    }
+
+    if (!currentPool) {
       return res.status(400).json({ 
         success: false, 
-        error: 'No hay conexión activa' 
+        error: 'No hay conexión activa. Por favor conecta primero.' 
       });
     }
 
-    const result = await pool.query(query);
+    // Ejecutar query
+    const result = await currentPool.query(query);
 
     res.json({
       success: true,
